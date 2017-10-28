@@ -158,7 +158,7 @@ pair<int, int> makeMove(int x, int y, moveDirection d)
 int dist(int X, int Y, moveDirection t)
 {
     if (X == -1 && Y == -1)
-        return -1;
+        return INF;
     bool visited[w][h];
     for (int x = 0; x < w; x++)
         for(int y = 0; y < h; y++)
@@ -187,14 +187,14 @@ int dist(int X, int Y, moveDirection t)
             for (int x = 0; x < w; x++)
             {
                 q.push(make_pair(0, make_pair(x, 0)));
-                visited[x][h - 1] = true;
+                visited[x][0] = true;
             }
             break;
         case DOWN:
             for (int x = 0; x < w; x++)
             {
                 q.push(make_pair(0, make_pair(x, h - 1)));
-                visited[x][0];
+                visited[x][h - 1];
             }
             break;
     }
@@ -286,6 +286,8 @@ pair<int, string> bestWall()
                 // cerr << "bestOppDist: " << bestOppDist << "\n";
                 // cerr << "myStatus: " << positions[myId].st << " " << positions[myId].nd << " " << directionToString(targets[myId]) << endl;
                 int newDist = dist(positions[myId].st, positions[myId].nd, targets[myId]);
+                if (newDist == -1)
+                    continue;
                 // cerr << "myDist: " << newDist << "\n";
                 int eval = bestOppDist - newDist;
                 if (eval > bestEval)

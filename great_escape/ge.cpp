@@ -151,7 +151,7 @@ int dist(int X, int Y, moveDirection t)
         for(int y = 0; y < h; y++)
             visited[x][y] = false;
 
-    queue <pair <int, pair <int, int> > q;
+    queue <pair <int, pair <int, int> > > q;
     
     // Add starting points
     switch(t)

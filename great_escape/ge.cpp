@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <sstream>
 #include <queue>
+#include <iterator>
+#include <array>
 
 #define st first
 #define nd second
@@ -13,15 +15,15 @@ const int INF = 100000;
 const int maxW = 9, maxH = 9, directions = 4, orientations = 2, players = 2;
 
 enum moveType {
-    MOVE,
-    WALL
+    MOVE = 0,
+    WALL =1
 };
 
 enum moveDirection {
-    UP,
-    DOWN,
-    LEFT,
-    RIGHT
+    UP = 0,
+    DOWN = 1,
+    LEFT = 2,
+    RIGHT = 3
 };
 
 string directionToString(moveDirection d)
@@ -41,8 +43,8 @@ string directionToString(moveDirection d)
 }
 
 enum wallOrientation {
-    VERTICAL,
-    HORIZONTAL
+    VERTICAL = 0,
+    HORIZONTAL = 1
 };
 
 string wallToString(int x, int y, wallOrientation o)
@@ -63,11 +65,12 @@ int w; // width of the board
 int h; // height of the board
 int playerCount; // number of players (2 or 3)
 int myId; // id of my player (0 = 1st player, 1 = 2nd player, ...)
-moveDirection target[] = {RIGHT, LEFT};
+moveDirection targets[] = {RIGHT, LEFT};
+int myWallsLeft;
 
 pair <int, int> positions[players];
-bool possibleMoves[maxW][maxH][directions];
-bool possibleWalls[maxW][maxH][orientations];
+array<array<array<bool, directions>, maxH>, maxW> possibleMoves;
+array<array<array<bool, directions>, maxH>, maxW> possibleWalls;
 
 void initGrid()
 {
@@ -146,6 +149,8 @@ pair<int, int> makeMove(int x, int y, moveDirection d)
 
 int dist(int X, int Y, moveDirection t)
 {
+    if (X == -1 && Y == -1)
+        return -1;
     bool visited[w][h];
     for (int x = 0; x < w; x++)
         for(int y = 0; y < h; y++)
@@ -200,7 +205,7 @@ int dist(int X, int Y, moveDirection t)
         {
             if (possibleMoves[x][y][d])
             {
-                auto newCoor = makeMove(x, y, d);
+                pair<int, int> newCoor = makeMove(x, y, (moveDirection)d);
                 q.push(make_pair(dist + 1, newCoor));
                 visited[newCoor.st][newCoor.nd] = true;
             }
@@ -212,23 +217,24 @@ int dist(int X, int Y, moveDirection t)
 pair<int, string> bestMove()
 {
     int bestOppDist = INF;
-    for (int id = 0; id < players; i++)
+    for (int id = 0; id < players; id++)
     {
         if (id == myId)
             continue;
-        bestOppDist = max(bestOppDist, dist(positions[i].st, positions[i].nd, targets[i]));
+        bestOppDist = max(bestOppDist, dist(positions[id].st, positions[id].nd, targets[id]));
     }
     moveDirection bestDir;
     int bestDist = INF;
+    int x = positions[myId].st, y = positions[myId].nd;
     for (int d = 0; d < directions; d++)
     {
-        if (!directionIsPossible(x, y, d))
+        if (!directionIsPossible((moveDirection)d, x, y))
             continue;
-        auto newCoor = makeMove(x, y, d)
+        pair<int, int> newCoor = makeMove(x, y, (moveDirection)d);
         int newDist = dist(newCoor.st, newCoor.nd, targets[myId]);
         if (newDist < bestDist)
         {
-            bestDir = d;
+            bestDir = (moveDirection)d;
             bestDist = newDist;
         }
     }
@@ -237,10 +243,10 @@ pair<int, string> bestMove()
 
 pair<int, string> bestWall()
 {
-    bool pmC[maxW][maxH][directions];
-    bool pwC[maxW][maxH][orientations];
+    array<array<array<bool, directions>, maxH>, maxW> pmC;
+    array<array<array<bool, directions>, maxH>, maxW> pwC;
     copy(begin(possibleWalls), end(possibleWalls), begin(pwC));    
-    copy(begin(possibleMoves), end(possibleMoves), begin(pwM));    
+    copy(begin(possibleMoves), end(possibleMoves), begin(pmC));    
 
     string bestWall = "";
     int bestEval = -INF;
@@ -249,27 +255,25 @@ pair<int, string> bestWall()
         for (int y = 0; y < h; y++)
             for (int o = 0; o < orientations; o++)
             {
-                markWall(x, y, o);
+                markWall(x, y, (wallOrientation)o);
                 int bestOppDist = INF;
-                for (int id = 0; id < players; i++)
+                for (int id = 0; id < players; id++)
                 {
                     if (id == myId)
                         continue;
-                    bestOppDist = max(bestOppDist, dist(positions[i].st, positions[i].nd, targets[i]));
+                    bestOppDist = max(bestOppDist, dist(positions[id].st, positions[id].nd, targets[id]));
                 }
-                int newDist = dist(newCoor.st, newCoor.nd, targets[myId]);
-                eval = bestOppDist - newDist;
+                int newDist = dist(positions[myId].st, positions[myId].nd, targets[myId]);
+                int eval = bestOppDist - newDist;
                 if (eval > bestEval)
                 {
                     bestEval = eval;
-                    bestWall = wallToString(x, y, o);
+                    bestWall = wallToString(x, y, (wallOrientation)o);
                 }
-
-        
 
                 // Get positions to original state
                 copy(begin(pwC), end(pwC), begin(possibleWalls));    
-                copy(begin(pwM), end(pwM), begin(possibleMoves));  
+                copy(begin(pmC), end(pmC), begin(possibleMoves));  
             }
     return make_pair(bestEval, bestWall);
 }
@@ -290,6 +294,8 @@ int main()
             int wallsLeft; // number of walls available for the player
             cin >> x >> y >> wallsLeft; cin.ignore();
             positions[i] = make_pair(x, y);
+            if (i == myId)
+                myWallsLeft = wallsLeft;
         }
 
         int wallCount; // number of walls on the board
@@ -298,15 +304,20 @@ int main()
         {
             int wallX; // x-coordinate of the wall
             int wallY; // y-coordinate of the wall
-            string wallOrientation; // wall orientation ('H' or 'V')
-            cin >> wallX >> wallY >> wallOrientation; cin.ignore();
-            markWall(x, y, wallOrientation);
+            string wallO; // wall orientation ('H' or 'V')
+            cin >> wallX >> wallY >> wallO; cin.ignore();
+            wallOrientation wO;
+            if (wallO == "H")
+                wO = HORIZONTAL;
+            else
+                wO = VERTICAL;
+            markWall(wallX, wallY, wO);
         }
-        if(x == -1 && y == -1 && wallsLeft == -1)
+        if(positions[myId].st == -1 && positions[myId].nd == -1)
             continue;
         auto move = bestMove();
         auto wall = bestWall();
-        if (move.st >= wall.st)
+        if (move.st >= wall.st || myWallsLeft == 0)
             cout << move.nd << endl;
         else 
             cout << wall.nd << endl;

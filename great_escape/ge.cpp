@@ -280,7 +280,7 @@ pair<pair<int, int>, string> bestMove()
 }
 
 
-const int wallsForward = 3;
+const int wallsForward = 1;
 int wallsAdded = 0;
 pair<pair<int, int>, string> bestWall()
 {
@@ -307,8 +307,8 @@ pair<pair<int, int>, string> bestWall()
                 eval.st--;
 
                 pair<int, int> potential(0, 0);
-                if (wallsAdded < wallsForward)
-                    potential = bestWall().st;
+                cerr << "wallsAdded: " << wallsAdded << endl;
+
 
                 int bestOppDist = INF;
                 int oppDistSum = 0;
@@ -318,13 +318,20 @@ pair<pair<int, int>, string> bestWall()
                 {
                     bestEval = eval;
                     bestWallString = wallToString(x, y, (wallOrientation)o);
+                    if (wallsAdded < wallsForward)
+                        potential = bestWall().st;
                     bestPotential = potential;
                 }
-                else if (eval == bestEval && potential > bestPotential)
+                else if (eval == bestEval)
                 {
-                    bestEval = eval;
-                    bestWallString = wallToString(x, y, (wallOrientation)o);
-                    bestPotential = potential;
+                    if (wallsAdded < wallsForward)
+                        potential = bestWall().st;
+                    if (potential > bestPotential)
+                    {
+                        bestEval = eval;
+                        bestWallString = wallToString(x, y, (wallOrientation)o);
+                        bestPotential = potential;
+                    }
                 }
                 
                 cerr << "current best wall: " << bestWallString << "\n";

@@ -279,15 +279,20 @@ pair<pair<int, int>, string> bestMove()
     return make_pair(bestEval, directionToString((moveDirection)bestDir));
 }
 
+
+const int wallsForward = 3;
+int wallsAdded = 0;
 pair<pair<int, int>, string> bestWall()
 {
+    wallsAdded++;
     array<array<array<bool, directions>, maxH>, maxW> pmC;
     array<array<array<bool, directions>, maxH>, maxW> pwC;
     copy(begin(possibleWalls), end(possibleWalls), begin(pwC));    
     copy(begin(possibleMoves), end(possibleMoves), begin(pmC));    
 
-    string bestWall = "";
+    string bestWallString = "";
     pair<int, int> bestEval(-INF, -INF);
+    pair<int, int> bestPotential(-INF, -INF);
 
     for (int x = 0; x < w; x++)
         for (int y = 0; y < h; y++)
@@ -297,8 +302,13 @@ pair<pair<int, int>, string> bestWall()
                     continue;
                     
                 markWall(x, y, (wallOrientation)o);
+
                 auto eval = evalGrid();
                 eval.st--;
+
+                pair<int, int> potential(0, 0);
+                if (wallsAdded < wallsForward)
+                    potential = bestWall().st;
 
                 int bestOppDist = INF;
                 int oppDistSum = 0;
@@ -307,15 +317,24 @@ pair<pair<int, int>, string> bestWall()
                 if (eval > bestEval)
                 {
                     bestEval = eval;
-                    bestWall = wallToString(x, y, (wallOrientation)o);
+                    bestWallString = wallToString(x, y, (wallOrientation)o);
+                    bestPotential = potential;
                 }
-                cerr << "current best wall: " << bestWall << "\n";
+                else if (eval == bestEval && potential > bestPotential)
+                {
+                    bestEval = eval;
+                    bestWallString = wallToString(x, y, (wallOrientation)o);
+                    bestPotential = potential;
+                }
+                
+                cerr << "current best wall: " << bestWallString << "\n";
 
                 // Get positions to original state
                 copy(begin(pwC), end(pwC), begin(possibleWalls));    
                 copy(begin(pmC), end(pmC), begin(possibleMoves));  
             }
-    return make_pair(bestEval, bestWall);
+    wallsAdded--;
+    return make_pair(bestEval, bestWallString);
 }
 
 int main()

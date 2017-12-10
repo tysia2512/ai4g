@@ -333,7 +333,7 @@ void chooseMoves(
             if (bestScore < 0.0)
                 cout << "WAIT\n";
             else
-                cout << "MOVE " << bestMove.st.st << " " << bestMove.st.nd << bestMove.nd << "\n";
+                cout << "MOVE " << bestMove.st.st << " " << bestMove.st.nd << " " << bestMove.nd << "\n";
         }
         default:
             cout << "WAIT\n";

@@ -19,10 +19,14 @@ enum Owner {
 };
 
 enum League {
-    WOODEN
+    WOODEN3,
+    WOODEN2,
+    BRONZE
 };
 
-const League league = WOODEN;
+const League league = BRONZE;
+int sendBomb = 2;
+int bombsLeft = 2;
 
 struct factoryState {
     int production;
@@ -37,12 +41,19 @@ struct troopState {
     int arrivingIn;
 };
 
+struct bombState {
+    Owner owner;
+    int fromFactory, toFactory;
+    int remainingTurns;
+};
+
 struct gameState {
     vector <factoryState> factories;
     vector <troopState> troops;
+    vector <bombState> bombs;
 };
 
-gameState predictTurn(gameState& currentGameState)
+gameState predictTurn(const gameState& currentGameState)
 {
     int factoryCount = currentGameState.factories.size();
     gameState nextState;
@@ -113,7 +124,7 @@ gameState predictTurn(gameState& currentGameState)
 
 }
 
-vector<gameState> predict(gameState& currentGameState, int turns = 5)
+vector<gameState> predict(const gameState& currentGameState, int turns = 5)
 {
     vector <gameState> nextStates(turns+1);
     nextStates[0] = currentGameState;
@@ -208,12 +219,12 @@ void computeFactoryValues(
 
     for (int f = 0; f < factoryCount; f++)
     {
-        factoryValue[f] = (double)factoryStates[f].production
+        factoryValue[f] = pow((double)factoryStates[f].production, 2)
             + 0.01 * pow(pathsThrough[f], 0.5) + 0.1;
     }    
 }
 
-vector <int> computeSpareUnits(gameState& currentState, int factoryCount, int turns=20)
+vector <int> computeSpareUnits(const gameState& currentState, int factoryCount, int turns=20)
 {
     vector <int> spareUnits(factoryCount, INF);
     vector <bool> toDefend(factoryCount, false);
@@ -264,8 +275,12 @@ vector <vector <pair <double, int> > > scoreMoves(
     for (int fromFactory = 0; fromFactory < factoryCount; fromFactory++)
         for(int toFactory = 0; toFactory < factoryCount; toFactory++)
         {
-            if (fromFactory == toFactory 
-            || spareUnits[fromFactory] == 0 
+            if (fromFactory == toFactory)
+            {
+                scores[fromFactory][toFactory].st = 1.0 / pow(10, 1.6);
+                scores[fromFactory][toFactory].nd = 10;
+            }
+            if (spareUnits[fromFactory] == 0 
             || nextStates[0].factories[fromFactory].owner != ME)
             {
                 scores[fromFactory][toFactory].st = -(double)INF;
@@ -280,20 +295,31 @@ vector <vector <pair <double, int> > > scoreMoves(
             }
             double score;
             int unitsNeeded;
+            // cerr << "CONSIDERED TARGET FACTORY VALUE: " << factoryValues[turnsAway][toFactory] << endl; 
             switch(nextStates[turnsAway].factories[toFactory].owner)
             {
                 case NEUTRAL:
-                    score = factoryValues[turnsAway][toFactory] 
-                        / (pow((double)turnsAway, 2) * (double)nextStates[turnsAway].factories[toFactory].units);
-                    unitsNeeded = nextStates[turnsAway].factories[toFactory].units;
-                case OPPONENT:
+                    // cerr << "Factory " << toFactory << " is predicted to be neutral\n"; 
+                    // score = (factoryValues[turnsAway][toFactory] - factoryValues[turnsAway][fromFactory]) 
                     score = factoryValues[turnsAway][toFactory]
-                        / (pow((double)turnsAway, 2) * 8);
-                    unitsNeeded = nextStates[turnsAway].factories[toFactory].units;
+                        / (pow((double)turnsAway, 2) * (double)(nextStates[turnsAway].factories[toFactory].units + 1));
+                    unitsNeeded = nextStates[turnsAway].factories[toFactory].units + 1;
+                    break;
+                case OPPONENT:
+                    // cerr << "Factory " << toFactory << " is predicted to be opponent's\n";   
+                    // score = (factoryValues[turnsAway][toFactory] - factoryValues[turnsAway][fromFactory]) 
+                    score = factoryValues[turnsAway][toFactory]
+                        / (pow((double)turnsAway, 2) * 10);
+                    unitsNeeded = nextStates[turnsAway].factories[toFactory].units + 1;
+                    break;
                 case ME:
+                    // cerr << "Factory " << toFactory << " is predicted to be mine\n";                 
                     score = factoryValues[turnsAway][toFactory]
                         / (pow((double)turnsAway, 2) * (-(double)spareUnits[toFactory]));
                     unitsNeeded = -spareUnits[toFactory];
+                    if (unitsNeeded <= 0)
+                        score = -INF;
+                    break;
             }
             scores[fromFactory][toFactory].st = score;
             scores[fromFactory][toFactory].nd = unitsNeeded;
@@ -304,13 +330,16 @@ vector <vector <pair <double, int> > > scoreMoves(
 void chooseMoves(
     vector <vector <pair <double, int> > >& scores, 
     vector <int>& spareUnits, 
-    gameState& currentState
+    gameState& currentState,
+    vector <gameState>& nextStates,
+    vector <vector <pair <int, int> > > links,
+    vector <vector <pair <int, vector <int> > > > bestPaths
 )
 {
     int factoryCount = scores.size();
     switch(league)
     {
-        case WOODEN:
+        case WOODEN3:
         {
             pair <pair <int, int>, int> bestMove;
             double bestScore = -INF;
@@ -320,9 +349,6 @@ void chooseMoves(
                     continue;
                 for (int toF = 0; toF < factoryCount; toF++)
                 {
-                    cerr << "MOVE FROM " << f << " TO " << toF 
-                        << " HAS SCORE " << scores[f][toF].st 
-                        << " AND REQUIRES " << scores[f][toF].nd << " TROOPS\n";
                     if (scores[f][toF].st > bestScore)
                     {
                         bestScore = scores[f][toF].st;
@@ -334,6 +360,105 @@ void chooseMoves(
                 cout << "WAIT\n";
             else
                 cout << "MOVE " << bestMove.st.st << " " << bestMove.st.nd << " " << bestMove.nd << "\n";
+            break;
+        }
+        case BRONZE:
+        case WOODEN2:
+        {
+            cout << "WAIT";
+            vector <bool> sendingTroopsAllowed(factoryCount, true);
+            if (sendBomb <= 0 && bombsLeft > 0)
+            {
+                priority_queue <pair <pair <int, int>, int> > bestBombs;
+                int lastPredicted = min((int)nextStates.size() - 1, 10);
+                
+                for (int f = 0; f < factoryCount; f++)
+                {
+                    if (nextStates[lastPredicted].factories[f].production >= 2
+                       && nextStates[lastPredicted].factories[f].owner == OPPONENT)
+                       bestBombs.push(
+                           make_pair(
+                               make_pair(
+                                   nextStates[lastPredicted].factories[f].production,
+                                   nextStates[lastPredicted].factories[f].units), 
+                                f));
+                }
+                while (bombsLeft > 0 && !bestBombs.empty())
+                {
+                    int toF = bestBombs.top().nd;
+                    bestBombs.pop();
+                    int mostDistant = 0;
+                    int unitsWasted = INF;
+                    int fromFactory = toF;
+                    for (int i = 0; i < links[toF].size(); i++)
+                    {
+                        int fromF = links[toF][i].st;
+                        int dist = links[toF][i].nd;
+                        if ((spareUnits[fromF] <= 0 
+                            || spareUnits[fromF] < unitsWasted)
+                            && currentState.factories[fromF].owner == ME)
+                        {
+                            if (unitsWasted <= 0 && dist < mostDistant)
+                                continue;
+
+                            fromFactory = fromF;
+                            unitsWasted = spareUnits[fromF];
+                            mostDistant = dist;
+                        }
+                    }
+                    cout << ";BOMB " << fromFactory << " " << toF;
+                    sendingTroopsAllowed[fromFactory] = false;
+                    bombsLeft--;
+                }
+            }
+
+            for (int f = 0; f < factoryCount; f++)
+            {
+                if (currentState.factories[f].owner != ME || sendingTroopsAllowed[f] == false)
+                    continue;
+
+                cerr << "Scores for moves from " << f << ":\n";
+                for (int toF = 0; toF < factoryCount; toF++)
+                    cerr << "to: " << toF << ", score: " << scores[f][toF].st << ", units: " << scores[f][toF].nd << endl;  
+
+                int spareUnitsLeft = spareUnits[f];
+                priority_queue <pair <double, int> > possibleMoves;
+                for (int toF = 0; toF < factoryCount; toF++)
+                    if (scores[f][toF].st > 0.0)
+                        possibleMoves.push(make_pair(scores[f][toF].st, toF));
+                
+
+                while (spareUnitsLeft > 0 && !possibleMoves.empty())
+                {
+                    int moveTo = possibleMoves.top().nd;
+                    int indirect = bestPaths[f][moveTo].nd[1];
+                    int moveUnits = scores[f][moveTo].nd;
+                    
+                    possibleMoves.pop();                    
+                    if (moveTo == f && spareUnitsLeft >= 10 && currentState.factories[f].production < 3)
+                    {
+                        cout << ";INC " << f;
+                        continue;
+                    }
+                    if (spareUnitsLeft >= 0 && moveTo != f)
+                    {
+                        if (currentState.factories[moveTo].owner == OPPONENT)
+                            moveUnits = spareUnitsLeft;
+                        cout << ";MOVE " << f << " " << indirect << " " << moveUnits;
+                        spareUnitsLeft -= moveUnits;
+                    }
+                    else if (spareUnitsLeft < 0 && moveTo !=f && currentState.factories[moveTo].owner == NEUTRAL)
+                    {
+                        moveUnits = currentState.factories[f].units;
+                        cout << ";MOVE " << f << " " << indirect << " " << moveUnits;
+                        spareUnitsLeft -= moveUnits;
+                    }
+                    else
+                        break;
+                }
+            }
+            cout << "\n";
+            break;
         }
         default:
             cout << "WAIT\n";
@@ -394,6 +519,7 @@ int main()
         int entityCount; // the number of entities (e.g. factories and troops)
         cin >> entityCount; cin.ignore();
         currentGameState.troops.clear();
+        currentGameState.factories.clear();
         currentGameState.factories.resize(factoryCount);
         for (int i = 0; i < entityCount; i++) {
             int entityId;
@@ -416,13 +542,18 @@ int main()
                 troopState troop{(Owner)(arg1 + 1), arg2, arg3, arg4, arg5};
                 currentGameState.troops.push_back(troop);
             }
+            if (entityType == "BOMB")
+            {
+                bombState bomb {(Owner)(arg1 + 1), arg2, arg3, arg4};
+                currentGameState.bombs.push_back(bomb);
+            }
         }
-        cerr << "TURN DATA READ\n";
         computeFactoryValues(currentGameState.factories, bestPaths, factoryCount, factoryValues);
         auto nextStates = predict(currentGameState, turnsAhead);
         auto spareUnits = computeSpareUnits(currentGameState, factoryCount, turnsAhead);
         vector <vector <pair <double, int> > > moveScores = scoreMoves(nextStates, spareUnits, factoryCount, bestPaths);
 
-        chooseMoves(moveScores, spareUnits, currentGameState);
+        chooseMoves(moveScores, spareUnits, currentGameState, nextStates, links, bestPaths);
+        sendBomb--;
     }
 }
